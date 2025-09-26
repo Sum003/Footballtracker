@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <title>Football Tracker</title>
+
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚽ Football Tracker</h1>
+            <p>Live scores, fixtures, and results from top competitions</p>
+        </div>
+
+        <div class="controls">
+            <button class="btn active" onclick="loadMatches('PL')">Premier League</button>
+            <button class="btn" onclick="loadMatches('BL1')">Bundesliga</button>
+            <button class="btn" onclick="loadMatches('SA')">Serie A</button>
+            <button class="btn" onclick="loadMatches('PD')">La Liga</button>
+            <button class="btn" onclick="loadMatches('FL1')">Ligue 1</button>
+        </div>
+
+        <div class="favorites-controls">
+            <button class="favorites-btn" onclick="toggleFavoritesFilter()" id="favoritesFilterBtn">
+                ❤️ Show Favorites Only
+            </button>
+            <button class="btn" onclick="clearAllFavorites()" style="background-color: #6c757d;">
+                Clear All Favorites
+            </button>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading matches...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.football-data.org/v4';
+        const API_KEY = '909c465a424c41a58970ddf229201630';
+
+        let currentCompetition = 'PL';
+        let showFavoritesOnly = false;
+        let allMatches = [];
+        let favoriteGames = JSON.parse(localStorage.getItem('favoriteGames') || '[]');
+        let favoriteTeams = JSON.parse(localStorage.getItem('favoriteTeams') || '[]');
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            loadMatches('PL');
+        });
+
+        async function loadMatches(competitionCode) {
+            currentCompetition = competitionCode;
+            
+            // Update active button
+            document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            const content = document.getElementById('content');
+            content.innerHTML = '<div class="loading">Loading matches...</div>';
+
+            try {
+                // For demo purposes, we'll use mock data since you'll need an API key
+                // Replace this with actual API call once you have a key
+                const matches = await fetchMockMatches(competitionCode);
+                allMatches = matches;
+                displayMatches(matches);
+            } catch (error) {
+                console.error('Error fetching matches:', error);
+                content.innerHTML = `
+                    <div class="error">
+                        <h3>Unable to load matches</h3>
+                        <p>Please check your internet connection or try again later.</p>
+                        <p><small>Note: You'll need to add your API key from football-data.org</small></p>
+                    </div>
+                `;
+            }
+        }
+
+        // Mock data for demonstration - replace with actual API call
+        async function fetchMockMatches(competitionCode) {
+            // Simulate API delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const competitions = {
+                'PL': 'Premier League',
+                'BL1': 'Bundesliga',
+                'SA': 'Serie A',
+                'PD': 'La Liga',
+                'FL1': 'Ligue 1'
+            };
+
+            return {
+                competition: { name: competitions[competitionCode] },
+                matches: [
+                    {
+                        id: 1,
+                        homeTeam: { name: 'Manchester United' },
+                        awayTeam: { name: 'Liverpool' },
+                        score: { fullTime: { home: 2, away: 1 } },
+                        status: 'FINISHED',
+                        utcDate: new Date().toISOString()
+                    },
+                    {
+                        id: 2,
+                        homeTeam: { name: 'Arsenal' },
+                        awayTeam: { name: 'Chelsea' },
+                        score: { fullTime: { home: null, away: null } },
+                        status: 'SCHEDULED',
+                        utcDate: new Date(Date.now() + 86400000).toISOString()
+                    },
+                    {
+                        id: 3,
+                        homeTeam: { name: 'Manchester City' },
+                        awayTeam: { name: 'Tottenham' },
+                        score: { fullTime: { home: 1, away: 1 } },
+                        status: 'IN_PLAY',
+                        utcDate: new Date().toISOString()
+                    }
+                ]
+            };
+        }
+
+        function displayMatches(data) {
+            const content = document.getElementById('content');
+            
+            if (!data.matches || data.matches.length === 0) {
+                content.innerHTML = `
+                    <div class="error">
+                        <h3>No matches found</h3>
+                        <p>There are no matches available for this competition at the moment.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let matchesToShow = data.matches;
+            if (showFavoritesOnly) {
+                matchesToShow = data.matches.filter(match => {
+                    const isGameFavorited = favoriteGames.includes(match.id);
+                    const isHomeTeamFavorited = favoriteTeams.includes(match.homeTeam.name);
+                    const isAwayTeamFavorited = favoriteTeams.includes(match.awayTeam.name);
+                    return isGameFavorited || isHomeTeamFavorited || isAwayTeamFavorited;
+                });
+            }
+
+            const gamesGrid = document.createElement('div');
+            gamesGrid.className = 'games-grid';
+
+            matchesToShow.forEach(match => {
+                const gameBox = createGameBox(match, data.competition.name);
+                gamesGrid.appendChild(gameBox);
+            });
+
+            content.innerHTML = '';
+            content.appendChild(gamesGrid);
+        }
+
+        function createGameBox(match, competitionName) {
+            const gameBox = document.createElement('div');
+            gameBox.className = 'game-box';
+
+            const matchDate = new Date(match.utcDate);
+            const formattedDate = matchDate.toLocaleDateString() + ' ' + matchDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            const homeScore = match.score.fullTime.home !== null ? match.score.fullTime.home : '-';
+            const awayScore = match.score.fullTime.away !== null ? match.score.fullTime.away : '-';
+
+            let statusClass = 'scheduled';
+            let statusText = 'Scheduled';
+            
+            if (match.status === 'FINISHED') {
+                statusClass = 'finished';
+                statusText = 'Full Time';
+            } else if (match.status === 'IN_PLAY') {
+                statusClass = 'live';
+                statusText = 'LIVE';
+            }
+
+            const isGameFavorited = favoriteGames.includes(match.id);
+            const isHomeTeamFavorited = favoriteTeams.includes(match.homeTeam.name);
+            const isAwayTeamFavorited = favoriteTeams.includes(match.awayTeam.name);
+
+            gameBox.innerHTML = `
+                <div class="game-header">
+                    <div class="competition">${competitionName}</div>
+                    <div class="match-date">${formattedDate}</div>
+                    <button class="favorite-game ${isGameFavorited ? 'favorited' : ''}" onclick="toggleGameFavorite(${match.id})" title="Favorite this game">
+                        ${isGameFavorited ? '❤️' : '🤍'}
+                    </button>
+                </div>
+                <div class="teams">
+                    <div class="team">
+                        <div class="team-name">
+                            ${match.homeTeam.name}
+                            <button class="favorite-team ${isHomeTeamFavorited ? 'favorited' : ''}" onclick="toggleTeamFavorite('${match.homeTeam.name}')" title="Favorite this team">
+                                ${isHomeTeamFavorited ? '⭐' : '☆'}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="score-section">
+                        <span class="score">${homeScore}</span>
+                        <span class="vs">-</span>
+                        <span class="score">${awayScore}</span>
+                    </div>
+                    <div class="team">
+                        <div class="team-name">
+                            ${match.awayTeam.name}
+                            <button class="favorite-team ${isAwayTeamFavorited ? 'favorited' : ''}" onclick="toggleTeamFavorite('${match.awayTeam.name}')" title="Favorite this team">
+                                ${isAwayTeamFavorited ? '⭐' : '☆'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="status ${statusClass}">${statusText}</div>
+            `;
+
+            return gameBox;
+        }
+
+        function toggleGameFavorite(gameId) {
+            const index = favoriteGames.indexOf(gameId);
+            if (index > -1) {
+                favoriteGames.splice(index, 1);
+            } else {
+                favoriteGames.push(gameId);
+            }
+            localStorage.setItem('favoriteGames', JSON.stringify(favoriteGames));
+            displayMatches(allMatches);
+        }
+
+        function toggleTeamFavorite(teamName) {
+            const index = favoriteTeams.indexOf(teamName);
+            if (index > -1) {
+                favoriteTeams.splice(index, 1);
+            } else {
+                favoriteTeams.push(teamName);
+            }
+            localStorage.setItem('favoriteTeams', JSON.stringify(favoriteTeams));
+            displayMatches(allMatches);
+        }
+
+        function toggleFavoritesFilter() {
+            showFavoritesOnly = !showFavoritesOnly;
+            const btn = document.getElementById('favoritesFilterBtn');
+            if (showFavoritesOnly) {
+                btn.textContent = '📋 Show All Games';
+                btn.classList.add('active');
+            } else {
+                btn.textContent = '❤️ Show Favorites Only';
+                btn.classList.remove('active');
+            }
+            displayMatches(allMatches);
+        }
+
+        function clearAllFavorites() {
+            if (confirm('Are you sure you want to clear all favorites?')) {
+                favoriteGames = [];
+                favoriteTeams = [];
+                localStorage.removeItem('favoriteGames');
+                localStorage.removeItem('favoriteTeams');
+                displayMatches(allMatches);
+            }
+        }
+
+        setInterval(() => {
+            const liveMatches = document.querySelectorAll('.status.live');
+            if (liveMatches.length > 0) {
+                loadMatches(currentCompetition);
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
